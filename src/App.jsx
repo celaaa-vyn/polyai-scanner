@@ -85,20 +85,34 @@ export default function App() {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [betAmount, setBetAmount] = useState("3");
-  const [bankroll, setBankroll] = useState(10);
+  const [bankroll, setBankroll] = useState(() => {
+    const saved = localStorage.getItem("polyai_bankroll");
+    return saved ? parseFloat(saved) : 10;
+  });
   const [log, setLog] = useState([]);
   const [confidence, setConfidence] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
-  const [timeFilter, setTimeFilter] = useState("all"); // "all", "1h", "3d", "7d"
-  const [catFilter, setCatFilter] = useState("all"); // "all", "crypto", "sports", "ai", "politics"
+  const [timeFilter, setTimeFilter] = useState("all");
+  const [catFilter, setCatFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ── Auto-Trade Agent State ────────────────────────────────────
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
   const [agentStatus, setAgentStatus] = useState("IDLE");
   const [agentScanning, setAgentScanning] = useState(null);
-  const [tradeHistory, setTradeHistory] = useState([]);
+  const [tradeHistory, setTradeHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("polyai_trades") || "[]"); } catch { return []; }
+  });
   const [openPositions, setOpenPositions] = useState([]);
-  const [peakBankroll, setPeakBankroll] = useState(10);
+  const [peakBankroll, setPeakBankroll] = useState(() => {
+    const saved = localStorage.getItem("polyai_peak");
+    return saved ? parseFloat(saved) : 10;
+  });
+
+  // ── Persist to localStorage ──────────────────────────────────
+  useEffect(() => { localStorage.setItem("polyai_bankroll", bankroll.toString()); }, [bankroll]);
+  useEffect(() => { localStorage.setItem("polyai_trades", JSON.stringify(tradeHistory.slice(0, 50))); }, [tradeHistory]);
+  useEffect(() => { localStorage.setItem("polyai_peak", peakBankroll.toString()); }, [peakBankroll]);
   const cooldownMap = useRef({});
   const autoTradeRef = useRef(false);
   const bankrollRef = useRef(10);
@@ -223,6 +237,9 @@ Max 150 words.`;
       setConfidence({ score: confScore, risk });
       setRecommendation(rec);
       addLog(`Done. Confidence: ${confScore}/10 | Rec: ${rec} | Risk: ${risk}`);
+      if (confScore >= 8) {
+        sendNotification("🎯 High Confidence Market!", `${selected.question.slice(0, 60)}... → ${rec} (${confScore}/10)`);
+      }
     } catch (err) {
       setAnalysis("⚠ Error: " + err.message);
       addLog("ERROR: " + err.message);
@@ -372,11 +389,25 @@ Max 150 words.`;
     return { wins, losses, total: tradeHistory.length, winRate: tradeHistory.length > 0 ? ((wins / tradeHistory.length) * 100).toFixed(1) : "0.0", totalPnl: totalPnl.toFixed(2) };
   })();
 
+  // ── Browser Notification helper ──────────────────────────────
+  const sendNotification = useCallback((title, body) => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body, icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='28' font-size='28'>🤖</text></svg>" });
+    }
+  }, []);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
   /* ─── Styles ─────────────────────────────────────────────────── */
   const s = {
     app: { background: COLORS.bg, minHeight: "100vh", fontFamily: "'Courier New', monospace", color: COLORS.text },
     grid: { position: "fixed", inset: 0, backgroundImage: `linear-gradient(${COLORS.border}33 1px, transparent 1px), linear-gradient(90deg, ${COLORS.border}33 1px, transparent 1px)`, backgroundSize: "40px 40px", pointerEvents: "none", zIndex: 0 },
-    header: { borderBottom: `1px solid ${COLORS.border}`, padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 1, background: `${COLORS.panel}ee`, backdropFilter: "blur(10px)" },
+    header: { borderBottom: `1px solid ${COLORS.border}`, padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 1, background: `${COLORS.panel}ee`, backdropFilter: "blur(10px)", flexWrap: "wrap", gap: "12px" },
     main: { padding: "24px", position: "relative", zIndex: 1, maxWidth: "1400px", margin: "0 auto" },
     card: { background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: "4px", padding: "16px", marginBottom: "2px" },
     grid4: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "12px", marginBottom: "16px" },
@@ -385,6 +416,7 @@ Max 150 words.`;
     btn: (disabled) => ({ background: disabled ? `${COLORS.accent}44` : COLORS.accent, color: COLORS.bg, border: "none", padding: "8px 16px", borderRadius: "3px", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "'Courier New', monospace", fontSize: "12px", fontWeight: "bold", letterSpacing: "1px", width: "100%" }),
     panelH: { padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" },
     panelT: { fontSize: "11px", letterSpacing: "2px", textTransform: "uppercase", color: COLORS.textDim },
+    searchInput: { background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: "3px", width: "100%", fontFamily: "inherit", fontSize: "12px", outline: "none" },
   };
 
   return (
@@ -399,12 +431,24 @@ Max 150 words.`;
         .agent-glow { animation: glow 2s ease-in-out infinite; }
         .scan-bar { background: linear-gradient(90deg, transparent, ${COLORS.purple}44, transparent); background-size: 200% 100%; animation: scan 2s linear infinite; }
         ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${COLORS.border}; border-radius:2px;}
+        .search-input:focus { border-color: ${COLORS.accent} !important; box-shadow: 0 0 8px ${COLORS.accent}33; }
+        @media (max-width: 900px) {
+          .responsive-grid2 { grid-template-columns: 1fr !important; }
+          .responsive-grid4 { grid-template-columns: repeat(2, 1fr) !important; }
+          .responsive-header { flex-direction: column !important; text-align: center !important; gap: 12px !important; }
+          .responsive-header > div { justify-content: center !important; }
+          .responsive-stats { flex-wrap: wrap !important; justify-content: center !important; }
+        }
+        @media (max-width: 500px) {
+          .responsive-grid4 { grid-template-columns: 1fr !important; }
+          .responsive-main { padding: 12px !important; }
+        }
       `}</style>
 
       <div style={s.grid} />
 
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div style={s.header}>
+      <div style={s.header} className="responsive-header">
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS.accent, boxShadow: `0 0 8px ${COLORS.accent}` }} />
           <div>
@@ -412,7 +456,7 @@ Max 150 words.`;
             <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "3px" }}>PREDICTION MARKET AI ANALYZER</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "24px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "24px", alignItems: "center" }} className="responsive-stats">
           {/* Agent Toggle */}
           <div
             onClick={() => setAutoTradeEnabled(!autoTradeEnabled)}
@@ -469,7 +513,7 @@ Max 150 words.`;
         )}
 
         {/* ── Stats Grid ───────────────────────────────────────── */}
-        <div style={s.grid4}>
+        <div style={s.grid4} className="responsive-grid4">
           {[
             ["Current Bankroll", `$${bankroll.toFixed(2)}`, "Starting: $10.00"],
             ["Target", "$100.00", "10x goal"],
@@ -499,7 +543,7 @@ Max 150 words.`;
         </div>
 
         {/* ── Main 2-Column Grid ───────────────────────────────── */}
-        <div style={s.grid2}>
+        <div style={s.grid2} className="responsive-grid2">
           {/* ── Market List Panel ──────────────────────────────── */}
           <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: "4px", overflow: "hidden" }}>
             <div style={s.panelH}>
@@ -555,9 +599,25 @@ Max 150 words.`;
                 </button>
               ))}
             </div>
+            {/* Search Bar */}
+            <div style={{ padding: "8px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+              <input
+                className="search-input"
+                type="text"
+                placeholder="🔍 Search markets..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={s.searchInput}
+              />
+            </div>
             <div style={{ padding: "16px", maxHeight: "520px", overflowY: "auto" }}>
               {markets
                 .filter(m => {
+                  // Search filter
+                  if (searchQuery.trim()) {
+                    const q = searchQuery.toLowerCase();
+                    if (!m.question.toLowerCase().includes(q) && !m.category.toLowerCase().includes(q)) return false;
+                  }
                   // Time filter
                   if (timeFilter === "1h") { if (m.hoursLeft == null || m.hoursLeft > 1) return false; }
                   else if (timeFilter === "3d") { if (m.daysLeft == null || m.daysLeft > 3) return false; }
