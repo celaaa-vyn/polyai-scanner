@@ -1,5 +1,11 @@
 {
   "rewrites": [
     { "source": "/api/markets", "destination": "/api/markets" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 7 * * *"
+    }
   ]
 }
