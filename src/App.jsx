@@ -34,8 +34,8 @@ function parsePolymarketData(raw) {
       if (!m.question || !m.outcomePrices || !m.active || m.closed) return false;
       const prices = JSON.parse(m.outcomePrices);
       const yesOdds = parseFloat(prices[0]);
-      // Skip extremely one-sided markets (>97% or <3%)
-      if (yesOdds > 0.97 || yesOdds < 0.03) return false;
+      // Skip extremely one-sided markets (>99% or <1%)
+      if (yesOdds > 0.99 || yesOdds < 0.01) return false;
       return true;
     })
     .map(m => {
@@ -60,7 +60,7 @@ function parsePolymarketData(raw) {
       };
     })
     .sort((a, b) => b.volumeNum - a.volumeNum)
-    .slice(0, 20);
+    .slice(0, 40);
 }
 
 /* ─── AI Auto-Trade Agent ─────────────────────────────────────────── */

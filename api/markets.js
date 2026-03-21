@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
   try {
-    const url = "https://gamma-api.polymarket.com/markets?closed=false&limit=100&order=volume&ascending=false";
+    const url = "https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false";
     const response = await fetch(url, {
       headers: { "Accept": "application/json" },
     });
