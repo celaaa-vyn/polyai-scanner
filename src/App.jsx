@@ -28,15 +28,10 @@ const FALLBACK_MARKETS = [
   { id: "4", question: "Will there be a major AI model released by OpenAI in Q2 2026?", category: "AI & Tech", yesOdds: 0.78, noOdds: 0.22, volume: "960,000", live: false },
 ];
 
-// Sports keywords to filter out (we want prediction markets, not sports betting)
-const SPORTS_FILTER = /(\bvs\.?\b|moneyline|O\/U \d|Set \d|Game \d Winner|NBA |ATP |UEFA |FIFA |NHL |NFL |MLB |CBA |Serie [AB] |Euroleague|Overwatch|Premier League)/i;
-
 function parsePolymarketData(raw) {
   return raw
     .filter(m => {
       if (!m.question || !m.outcomePrices || !m.active || m.closed) return false;
-      if (SPORTS_FILTER.test(m.question)) return false;
-      if (m.sportsMarketType) return false;
       const prices = JSON.parse(m.outcomePrices);
       const yesOdds = parseFloat(prices[0]);
       // Skip extremely one-sided markets (>97% or <3%)
