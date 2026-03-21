@@ -1,0 +1,12 @@
+{
+  "name": "PolyAI Scanner",
+  "short_name": "PolyAI",
+  "description": "Prediction Market AI Analyzer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080c10",
+  "theme_color": "#00ff88",
+  "icons": [
+    { "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='28' font-size='28'>🤖</text></svg>", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
