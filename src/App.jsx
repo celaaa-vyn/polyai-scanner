@@ -2,19 +2,52 @@ import { useState, useCallback, useEffect, useRef } from "react";
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 
-const COLORS = {
-  bg: "#080c10",
-  panel: "#0d1117",
-  border: "#1c2a3a",
-  accent: "#00ff88",
-  accentDim: "#00cc6a",
-  red: "#ff4466",
-  yellow: "#ffd700",
-  blue: "#00aaff",
-  text: "#c9d1d9",
-  textDim: "#6e7681",
-  textBright: "#f0f6fc",
-  purple: "#a78bfa",
+const COLORS_DARK = {
+  bg: "#080c10", panel: "#0d1117", border: "#1c2a3a", accent: "#00ff88", accentDim: "#00cc6a",
+  red: "#ff4466", yellow: "#ffd700", blue: "#00aaff", text: "#c9d1d9", textDim: "#6e7681",
+  textBright: "#f0f6fc", purple: "#a78bfa",
+};
+const COLORS_LIGHT = {
+  bg: "#f0f2f5", panel: "#ffffff", border: "#d0d7de", accent: "#00aa55", accentDim: "#008844",
+  red: "#d1242f", yellow: "#bf8700", blue: "#0969da", text: "#1f2328", textDim: "#656d76",
+  textBright: "#1f2328", purple: "#8250df",
+};
+
+const STRINGS = {
+  en: {
+    title: "POLYAI SCANNER", subtitle: "PREDICTION MARKET AI ANALYZER",
+    bankroll: "BANKROLL", target: "TARGET", trades: "TRADES", markets: "MARKETS",
+    progress: "Progress", current: "Current Bankroll", available: "Available to analyze",
+    journey: "JOURNEY: $10 → $100", search: "🔍 Search markets...",
+    activeMarkets: "⬡ Active Markets", aiAnalysis: "⬡ AI Analysis", activityLog: "⬡ Activity Log",
+    selectMarket: "← Select a market to analyze", runAI: "▶ Run AI Analysis",
+    analyzing: "⟳ Analyzing...", aiAgent: "AI AGENT", active: "ACTIVE", off: "OFF",
+    refresh: "Refresh", favorites: "FAVS", exportCSV: "📥 Export CSV",
+    betCalc: "⬡ Bet Calculator", simulateBet: "▶ SIMULATE BET (Demo)",
+    tradeHist: "🤖 AI Agent Trade History", noActivity: "No activity yet.",
+    winRate: "Win Rate", peak: "Peak", remaining: "remaining",
+    starting: "Starting: $10.00", goal: "10x goal",
+    statsWins: "Wins", statsLosses: "Losses", statsPnl: "Total PnL", statsAvgConf: "Avg Conf",
+    close: "Close", volume: "Vol", description: "Description", endsAt: "Ends at",
+    source: "Resolution Source", odds: "Odds",
+  },
+  id: {
+    title: "POLYAI SCANNER", subtitle: "ANALISIS PASAR PREDIKSI AI",
+    bankroll: "SALDO", target: "TARGET", trades: "TRADE", markets: "PASAR",
+    progress: "Progres", current: "Saldo Saat Ini", available: "Tersedia untuk analisis",
+    journey: "PERJALANAN: $10 → $100", search: "🔍 Cari pasar...",
+    activeMarkets: "⬡ Pasar Aktif", aiAnalysis: "⬡ Analisis AI", activityLog: "⬡ Log Aktivitas",
+    selectMarket: "← Pilih pasar untuk analisis", runAI: "▶ Jalankan Analisis AI",
+    analyzing: "⟳ Menganalisis...", aiAgent: "AGEN AI", active: "AKTIF", off: "MATI",
+    refresh: "Segarkan", favorites: "FAVORIT", exportCSV: "📥 Ekspor CSV",
+    betCalc: "⬡ Kalkulator Taruhan", simulateBet: "▶ SIMULASI TARUHAN (Demo)",
+    tradeHist: "🤖 Riwayat Trade Agen AI", noActivity: "Belum ada aktivitas.",
+    winRate: "Win Rate", peak: "Puncak", remaining: "tersisa",
+    starting: "Mulai: $10.00", goal: "Target 10x",
+    statsWins: "Menang", statsLosses: "Kalah", statsPnl: "Total PnL", statsAvgConf: "Rata2 Konf",
+    close: "Tutup", volume: "Vol", description: "Deskripsi", endsAt: "Berakhir",
+    source: "Sumber Resolusi", odds: "Peluang",
+  },
 };
 
 const POLYMARKET_API = import.meta.env.PROD
@@ -121,6 +154,16 @@ export default function App() {
   const [catFilter, setCatFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // ── New Feature States ───────────────────────────────────────
+  const [theme, setTheme] = useState(() => localStorage.getItem("polyai_theme") || "dark");
+  const [lang, setLang] = useState(() => localStorage.getItem("polyai_lang") || "en");
+  const [favorites, setFavorites] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("polyai_favs") || "[]")); } catch { return new Set(); }
+  });
+  const [modalMarket, setModalMarket] = useState(null);
+  const [refreshCountdown, setRefreshCountdown] = useState(300);
+  const prevOddsRef = useRef({});
+
   // ── Auto-Trade Agent State ────────────────────────────────────
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
   const [agentStatus, setAgentStatus] = useState("IDLE");
@@ -138,44 +181,86 @@ export default function App() {
   useEffect(() => { localStorage.setItem("polyai_bankroll", bankroll.toString()); }, [bankroll]);
   useEffect(() => { localStorage.setItem("polyai_trades", JSON.stringify(tradeHistory.slice(0, 50))); }, [tradeHistory]);
   useEffect(() => { localStorage.setItem("polyai_peak", peakBankroll.toString()); }, [peakBankroll]);
+  useEffect(() => { localStorage.setItem("polyai_theme", theme); }, [theme]);
+  useEffect(() => { localStorage.setItem("polyai_lang", lang); }, [lang]);
+  useEffect(() => { localStorage.setItem("polyai_favs", JSON.stringify([...favorites])); }, [favorites]);
   const cooldownMap = useRef({});
   const autoTradeRef = useRef(false);
   const bankrollRef = useRef(10);
   const openPosRef = useRef([]);
+
+  // Dynamic colors & translations
+  const COLORS = theme === "dark" ? COLORS_DARK : COLORS_LIGHT;
+  const t = STRINGS[lang] || STRINGS.en;
 
   // Keep refs in sync
   useEffect(() => { bankrollRef.current = bankroll; }, [bankroll]);
   useEffect(() => { openPosRef.current = openPositions; }, [openPositions]);
   useEffect(() => { if (bankroll > peakBankroll) setPeakBankroll(bankroll); }, [bankroll, peakBankroll]);
 
-  // ── Fetch Live Polymarket Data ───────────────────────────────
+  // ── Auto-Refresh Countdown ──────────────────────────────────
   useEffect(() => {
-    const fetchMarkets = async () => {
-      try {
-        setMarketsLoading(true);
-        const fetchUrl = import.meta.env.PROD
-          ? POLYMARKET_API                                               // Proxy has params built-in
-          : `${POLYMARKET_API}?closed=false&limit=100&order=volume&ascending=false`;
-        const res = await fetch(fetchUrl);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const parsed = parsePolymarketData(data);
-        if (parsed.length > 0) {
-          setMarkets(parsed);
-          setMarketsSource("live");
-          addLog(`📡 Loaded ${parsed.length} live markets from Polymarket`);
-        } else {
-          setMarketsSource("demo");
-          addLog("⚠ No eligible markets found — using demo data");
-        }
-      } catch (err) {
+    const timer = setInterval(() => setRefreshCountdown(c => c <= 1 ? 300 : c - 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // ── Favorites Toggle ────────────────────────────────────────
+  const toggleFav = (id) => setFavorites(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  // ── Export CSV ──────────────────────────────────────────────
+  const exportCSV = () => {
+    const header = "Time,Market,Side,Bet,Odds,Confidence,Result,PnL,Bankroll\n";
+    const rows = tradeHistory.map(t =>
+      `"${t.time}","${t.market}","${t.side}",${t.bet},"${t.odds}",${t.confidence},${t.result},${t.pnl},${t.bankrollAfter}`
+    ).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "polyai_trades.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Fetch Live Polymarket Data ───────────────────────────────
+  const fetchMarkets = async () => {
+    try {
+      setMarketsLoading(true);
+      const fetchUrl = import.meta.env.PROD
+        ? POLYMARKET_API
+        : `${POLYMARKET_API}?closed=false&limit=100&order=volume&ascending=false`;
+      const res = await fetch(fetchUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const parsed = parsePolymarketData(data);
+      if (parsed.length > 0) {
+        // Track odds changes for price alerts
+        parsed.forEach(m => {
+          const prev = prevOddsRef.current[m.id];
+          if (prev) {
+            m.oddsChange = Math.abs(m.yesOdds - prev) * 100;
+          }
+          prevOddsRef.current[m.id] = m.yesOdds;
+        });
+        setMarkets(parsed);
+        setMarketsSource("live");
+        addLog(`📡 Loaded ${parsed.length} live markets from Polymarket`);
+      } else {
         setMarketsSource("demo");
-        addLog(`⚠ Polymarket API error: ${err.message} — using demo data`);
+        addLog("⚠ No eligible markets found — using demo data");
       }
-      setMarketsLoading(false);
-    };
+    } catch (err) {
+      setMarketsSource("demo");
+      addLog(`⚠ Polymarket API error: ${err.message} — using demo data`);
+    }
+    setMarketsLoading(false);
+    setRefreshCountdown(300);
+  };
+
+  useEffect(() => {
     fetchMarkets();
-    const interval = setInterval(fetchMarkets, 5 * 60 * 1000); // Refresh every 5 min
+    const interval = setInterval(fetchMarkets, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -477,11 +562,15 @@ Max 150 words.`;
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS.accent, boxShadow: `0 0 8px ${COLORS.accent}` }} />
           <div>
-            <div style={{ fontSize: "18px", fontWeight: "bold", color: COLORS.accent, letterSpacing: "4px" }}>POLYAI SCANNER</div>
-            <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "3px" }}>PREDICTION MARKET AI ANALYZER</div>
+            <div style={{ fontSize: "18px", fontWeight: "bold", color: COLORS.accent, letterSpacing: "4px" }}>{t.title}</div>
+            <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "3px" }}>{t.subtitle}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "24px", alignItems: "center" }} className="responsive-stats">
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }} className="responsive-stats">
+          {/* Theme Toggle */}
+          <button onClick={() => setTheme(th => th === "dark" ? "light" : "dark")} title="Toggle Theme" style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: "4px", padding: "6px 10px", cursor: "pointer", fontSize: "16px", color: COLORS.text }}>{theme === "dark" ? "☀️" : "🌙"}</button>
+          {/* Language Toggle */}
+          <button onClick={() => setLang(l => l === "en" ? "id" : "en")} title="Toggle Language" style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: "4px", padding: "4px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold", fontFamily: "inherit", color: COLORS.text, letterSpacing: "1px" }}>{lang === "en" ? "🇮🇩 ID" : "🇬🇧 EN"}</button>
           {/* Agent Toggle */}
           <div
             onClick={() => setAutoTradeEnabled(!autoTradeEnabled)}
@@ -495,13 +584,13 @@ Max 150 words.`;
           >
             <span style={{ fontSize: "14px" }}>{autoTradeEnabled ? "🤖" : "⚡"}</span>
             <div>
-              <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "2px" }}>AI AGENT</div>
+              <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "2px" }}>{t.aiAgent}</div>
               <div style={{ fontSize: "13px", fontWeight: "bold", color: autoTradeEnabled ? COLORS.purple : COLORS.textDim }}>
-                {autoTradeEnabled ? "ACTIVE" : "OFF"}
+                {autoTradeEnabled ? t.active : t.off}
               </div>
             </div>
           </div>
-          {[["BANKROLL", `$${bankroll.toFixed(2)}`, COLORS.accent], ["TARGET", "$100.00", COLORS.yellow], ["TRADES", `${agentStats.total}`, COLORS.blue]].map(([l, v, c]) => (
+          {[[t.bankroll, `$${bankroll.toFixed(2)}`, COLORS.accent], [t.target, "$100.00", COLORS.yellow], [t.trades, `${agentStats.total}`, COLORS.blue]].map(([l, v, c]) => (
             <div key={l} style={{ textAlign: "right" }}>
               <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "2px" }}>{l}</div>
               <div style={{ fontSize: "20px", fontWeight: "bold", color: c }}>{v}</div>
@@ -572,10 +661,13 @@ Max 150 words.`;
           {/* ── Market List Panel ──────────────────────────────── */}
           <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: "4px", overflow: "hidden" }}>
             <div style={s.panelH}>
-              <span style={s.panelT}>⬡ Active Markets</span>
-              <span style={{ fontSize: "10px", color: marketsSource === "live" ? COLORS.accent : COLORS.yellow }}>
-                {marketsLoading ? "⟳ LOADING..." : marketsSource === "live" ? `LIVE 📡` : `DEMO`}
-              </span>
+              <span style={s.panelT}>{t.activeMarkets}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button onClick={fetchMarkets} title={t.refresh} style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: "3px", padding: "3px 8px", cursor: "pointer", fontSize: "11px", fontFamily: "inherit", color: COLORS.accent }}>🔄 {Math.floor(refreshCountdown / 60)}:{String(refreshCountdown % 60).padStart(2, "0")}</button>
+                <span style={{ fontSize: "10px", color: marketsSource === "live" ? COLORS.accent : COLORS.yellow }}>
+                  {marketsLoading ? "⟳ LOADING..." : marketsSource === "live" ? `LIVE 📡` : `DEMO`}
+                </span>
+              </div>
             </div>
             {/* Time Filter Buttons */}
             <div style={{ display: "flex", gap: "6px", padding: "8px 16px", borderBottom: `1px solid ${COLORS.border}`, flexWrap: "wrap" }}>
@@ -604,10 +696,12 @@ Max 150 words.`;
               <span style={{ fontSize: "9px", color: COLORS.textDim, alignSelf: "center", marginRight: "4px" }}>🎯</span>
               {[
                 { key: "all", label: "ALL" },
+                { key: "favs", label: `⭐ ${t.favorites}` },
                 { key: "crypto", label: "CRYPTO" },
                 { key: "sports", label: "SPORTS" },
                 { key: "ai", label: "AI" },
                 { key: "politics", label: "POLITICS" },
+                { key: "ipos", label: "IPOs" },
               ].map(f => (
                 <button
                   key={"cat-" + f.key}
@@ -629,7 +723,7 @@ Max 150 words.`;
               <input
                 className="search-input"
                 type="text"
-                placeholder="🔍 Search markets..."
+                placeholder={t.search}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={s.searchInput}
@@ -648,12 +742,14 @@ Max 150 words.`;
                   else if (timeFilter === "3d") { if (m.daysLeft == null || m.daysLeft > 3) return false; }
                   else if (timeFilter === "7d") { if (m.daysLeft == null || m.daysLeft > 7) return false; }
                   // Category filter
-                  if (catFilter !== "all") {
+                  if (catFilter === "favs") { if (!favorites.has(m.id)) return false; }
+                  else if (catFilter !== "all") {
                     const q = (m.question + " " + m.category).toLowerCase();
                     if (catFilter === "crypto" && !/bitcoin|btc|eth|crypto|token|solana|airdrop|defi|nft|coin|pump|up or down|dogecoin|doge|bnb|xrp|hyperliquid/i.test(q)) return false;
                     if (catFilter === "sports" && !/nba|atp|nfl|mlb|nhl|soccer|football|tennis|boxing|ufc|game|match|winner|serie|league|overwatch/i.test(q)) return false;
                     if (catFilter === "ai" && !/\bai\b|openai|artificial|gpt|llm|deepmind|anthropic|model|data center/i.test(q)) return false;
                     if (catFilter === "politics" && !/president|election|senate|governor|congress|trump|democrat|republican|vote|iran|ukraine|war|tariff|inflation/i.test(q)) return false;
+                    if (catFilter === "ipos" && !/ipo|stock|share|nyse|nasdaq|listing|s&p|dow|equity|etf|index/i.test(q)) return false;
                   }
                   return true;
                 })
@@ -673,13 +769,21 @@ Max 150 words.`;
                   {agentScanning === m.id && (
                     <div className="scan-bar" style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", borderRadius: "3px 3px 0 0" }} />
                   )}
-                  <div style={{ fontSize: "13px", color: COLORS.textBright, marginBottom: "6px", lineHeight: "1.4" }}>{m.question}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                    <div style={{ fontSize: "13px", color: COLORS.textBright, lineHeight: "1.4", flex: 1, cursor: "pointer" }}
+                      onClick={(e) => { e.stopPropagation(); setModalMarket(m); }}
+                    >{m.question}</div>
+                    <div style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: "8px", flexShrink: 0 }}>
+                      {m.oddsChange >= 5 && <span title={`Odds changed ${m.oddsChange.toFixed(0)}%`} style={{ fontSize: "12px", cursor: "help" }}>🔔</span>}
+                      <span onClick={(e) => { e.stopPropagation(); toggleFav(m.id); }} style={{ cursor: "pointer", fontSize: "14px" }}>{favorites.has(m.id) ? "⭐" : "☆"}</span>
+                    </div>
+                  </div>
                   <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
                     <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "2px", background: `${COLORS.blue}22`, color: COLORS.blue, border: `1px solid ${COLORS.blue}44` }}>{m.category}</span>
                     <span style={{ fontSize: "13px", fontWeight: "bold", color: COLORS.accent }}>Y {(m.yesOdds * 100).toFixed(0)}%</span>
                     <span style={{ fontSize: "13px", fontWeight: "bold", color: COLORS.red }}>N {(m.noOdds * 100).toFixed(0)}%</span>
                     <span style={{ fontSize: "12px", color: COLORS.textDim, marginLeft: "auto" }}>
-                      Vol: ${m.volume}{m.hoursLeft != null ? (m.hoursLeft < 24 ? ` · ${m.hoursLeft}h` : ` · ${m.daysLeft}d`) : ""}
+                      {t.volume}: ${m.volume}{m.hoursLeft != null ? (m.hoursLeft < 24 ? ` · ${m.hoursLeft}h` : ` · ${m.daysLeft}d`) : ""}
                     </span>
                   </div>
                 </div>
@@ -781,31 +885,49 @@ Max 150 words.`;
           </div>
         </div>
 
-        {/* ── Agent Trade History ───────────────────────────────── */}
+        {/* ── Win/Loss Stats + Trade History ───────────────────── */}
         {tradeHistory.length > 0 && (
           <div className="fi" style={{ ...s.card, marginBottom: "16px" }}>
-            <div style={{ ...s.label, marginBottom: "10px" }}>🤖 AI Agent Trade History</div>
+            {/* Stats Bar */}
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "12px", padding: "10px", background: COLORS.bg, borderRadius: "3px", border: `1px solid ${COLORS.border}` }}>
+              {(() => {
+                const wins = tradeHistory.filter(tr => tr.result === "WIN").length;
+                const losses = tradeHistory.filter(tr => tr.result === "LOSS").length;
+                const totalPnl = tradeHistory.reduce((s, tr) => s + parseFloat(tr.pnl), 0);
+                const avgConf = tradeHistory.length > 0 ? (tradeHistory.reduce((s, tr) => s + tr.confidence, 0) / tradeHistory.length).toFixed(1) : "0";
+                return [[t.statsWins, wins, COLORS.accent], [t.statsLosses, losses, COLORS.red], [t.winRate, tradeHistory.length > 0 ? ((wins / tradeHistory.length) * 100).toFixed(1) + "%" : "0%", COLORS.blue], [t.statsPnl, `$${totalPnl.toFixed(2)}`, totalPnl >= 0 ? COLORS.accent : COLORS.red], [t.statsAvgConf, avgConf, COLORS.yellow]].map(([l, v, c]) => (
+                  <div key={l} style={{ textAlign: "center", flex: 1, minWidth: "60px" }}>
+                    <div style={{ fontSize: "9px", color: COLORS.textDim, letterSpacing: "1px", textTransform: "uppercase" }}>{l}</div>
+                    <div style={{ fontSize: "16px", fontWeight: "bold", color: c }}>{v}</div>
+                  </div>
+                ));
+              })()}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <div style={s.label}>{t.tradeHist}</div>
+              <button onClick={exportCSV} style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: "3px", padding: "4px 10px", cursor: "pointer", fontSize: "10px", fontFamily: "inherit", color: COLORS.accent }}>{t.exportCSV}</button>
+            </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                    {["Time", "Market", "Side", "Bet", "Odds", "Conf", "Result", "PnL", "Bankroll"].map(h => (
+                    {["Time", "Market", "Side", "Bet", t.odds, "Conf", "Result", "PnL", t.bankroll].map(h => (
                       <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: COLORS.textDim, letterSpacing: "1px", fontSize: "9px", textTransform: "uppercase" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {tradeHistory.slice(0, 15).map(t => (
-                    <tr key={t.id} style={{ borderBottom: `1px solid ${COLORS.border}22` }}>
-                      <td style={{ padding: "5px 8px", color: COLORS.textDim }}>{t.time}</td>
-                      <td style={{ padding: "5px 8px", color: COLORS.textBright, maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.market}</td>
-                      <td style={{ padding: "5px 8px", color: t.side === "YES" ? COLORS.accent : COLORS.red, fontWeight: "bold" }}>{t.side}</td>
-                      <td style={{ padding: "5px 8px", color: COLORS.textBright }}>${t.bet.toFixed(2)}</td>
-                      <td style={{ padding: "5px 8px", color: COLORS.textDim }}>{t.odds}</td>
-                      <td style={{ padding: "5px 8px", color: getColor(t.confidence) }}>{t.confidence}/10</td>
-                      <td style={{ padding: "5px 8px", color: t.result === "WIN" ? COLORS.accent : COLORS.red, fontWeight: "bold" }}>{t.result}</td>
-                      <td style={{ padding: "5px 8px", color: parseFloat(t.pnl) >= 0 ? COLORS.accent : COLORS.red, fontWeight: "bold" }}>${t.pnl}</td>
-                      <td style={{ padding: "5px 8px", color: COLORS.textBright }}>${t.bankrollAfter}</td>
+                  {tradeHistory.slice(0, 15).map(tr => (
+                    <tr key={tr.id} style={{ borderBottom: `1px solid ${COLORS.border}22` }}>
+                      <td style={{ padding: "5px 8px", color: COLORS.textDim }}>{tr.time}</td>
+                      <td style={{ padding: "5px 8px", color: COLORS.textBright, maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.market}</td>
+                      <td style={{ padding: "5px 8px", color: tr.side === "YES" ? COLORS.accent : COLORS.red, fontWeight: "bold" }}>{tr.side}</td>
+                      <td style={{ padding: "5px 8px", color: COLORS.textBright }}>${tr.bet.toFixed(2)}</td>
+                      <td style={{ padding: "5px 8px", color: COLORS.textDim }}>{tr.odds}</td>
+                      <td style={{ padding: "5px 8px", color: getColor(tr.confidence) }}>{tr.confidence}/10</td>
+                      <td style={{ padding: "5px 8px", color: tr.result === "WIN" ? COLORS.accent : COLORS.red, fontWeight: "bold" }}>{tr.result}</td>
+                      <td style={{ padding: "5px 8px", color: parseFloat(tr.pnl) >= 0 ? COLORS.accent : COLORS.red, fontWeight: "bold" }}>${tr.pnl}</td>
+                      <td style={{ padding: "5px 8px", color: COLORS.textBright }}>${tr.bankrollAfter}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -816,14 +938,52 @@ Max 150 words.`;
 
         {/* ── Activity Log ──────────────────────────────────────── */}
         <div style={s.card}>
-          <div style={s.label}>⬡ Activity Log</div>
+          <div style={s.label}>{t.activityLog}</div>
           <div style={{ fontSize: "11px", color: COLORS.textDim, maxHeight: "160px", overflowY: "auto", marginTop: "8px" }}>
-            {log.length === 0 ? <div>No activity yet.</div> : log.map((e, i) => (
+            {log.length === 0 ? <div>{t.noActivity}</div> : log.map((e, i) => (
               <div key={i} style={{ borderBottom: `1px solid ${COLORS.border}22`, padding: "3px 0", lineHeight: "1.5" }}>{e}</div>
             ))}
           </div>
         </div>
       </div>
+
+      {/* ── Market Detail Modal ──────────────────────────────────── */}
+      {modalMarket && (
+        <div className="fi" onClick={() => setModalMarket(null)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: "24px",
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: "6px",
+            padding: "24px", maxWidth: "600px", width: "100%", maxHeight: "80vh", overflowY: "auto",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+              <div style={{ fontSize: "16px", fontWeight: "bold", color: COLORS.textBright, lineHeight: "1.4", flex: 1, marginRight: "16px" }}>{modalMarket.question}</div>
+              <button onClick={() => setModalMarket(null)} style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: "3px", padding: "4px 10px", cursor: "pointer", fontSize: "14px", color: COLORS.textDim }}>✕</button>
+            </div>
+            <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
+              <span style={{ padding: "4px 12px", borderRadius: "3px", background: `${COLORS.blue}22`, color: COLORS.blue, fontSize: "11px", border: `1px solid ${COLORS.blue}44` }}>{modalMarket.category}</span>
+              <span style={{ fontSize: "14px", fontWeight: "bold", color: COLORS.accent }}>Y {(modalMarket.yesOdds * 100).toFixed(1)}%</span>
+              <span style={{ fontSize: "14px", fontWeight: "bold", color: COLORS.red }}>N {(modalMarket.noOdds * 100).toFixed(1)}%</span>
+            </div>
+            {/* Odds bar */}
+            <div style={{ background: COLORS.border, borderRadius: "4px", height: "20px", overflow: "hidden", marginBottom: "16px", display: "flex" }}>
+              <div style={{ width: `${modalMarket.yesOdds * 100}%`, background: COLORS.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "bold", color: COLORS.bg }}>YES</div>
+              <div style={{ flex: 1, background: COLORS.red, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "bold", color: "#fff" }}>NO</div>
+            </div>
+            {[
+              [t.volume, `$${modalMarket.volume}`],
+              [t.endsAt, modalMarket.endDate || "N/A"],
+              [t.description, modalMarket.description || modalMarket.question],
+            ].map(([label, val]) => (
+              <div key={label} style={{ marginBottom: "12px" }}>
+                <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "4px" }}>{label}</div>
+                <div style={{ fontSize: "12px", color: COLORS.text, lineHeight: "1.5", whiteSpace: "pre-wrap" }}>{val}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
