@@ -60,6 +60,7 @@ function parsePolymarketData(raw) {
         live: true,
         slug: m.slug,
         endDate: m.endDate,
+        daysLeft: m.endDate ? Math.max(0, Math.ceil((new Date(m.endDate) - new Date()) / 86400000)) : null,
       };
     })
     .sort((a, b) => b.volumeNum - a.volumeNum)
@@ -92,6 +93,7 @@ export default function App() {
   const [log, setLog] = useState([]);
   const [confidence, setConfidence] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
+  const [timeFilter, setTimeFilter] = useState("all"); // "all", "3d", "7d"
 
   // ── Auto-Trade Agent State ────────────────────────────────────
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
@@ -506,11 +508,41 @@ Max 150 words.`;
             <div style={s.panelH}>
               <span style={s.panelT}>⬡ Active Markets</span>
               <span style={{ fontSize: "10px", color: marketsSource === "live" ? COLORS.accent : COLORS.yellow }}>
-                {marketsLoading ? "⟳ LOADING..." : marketsSource === "live" ? `${markets.length} LIVE 📡` : `${markets.length} DEMO`}
+                {marketsLoading ? "⟳ LOADING..." : marketsSource === "live" ? `LIVE 📡` : `DEMO`}
               </span>
             </div>
+            {/* Time Filter Buttons */}
+            <div style={{ display: "flex", gap: "6px", padding: "8px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+              {[
+                { key: "all", label: "ALL" },
+                { key: "3d", label: "≤3 DAYS" },
+                { key: "7d", label: "≤7 DAYS" },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setTimeFilter(f.key)}
+                  style={{
+                    padding: "4px 10px", fontSize: "10px", fontWeight: 700, fontFamily: "inherit",
+                    border: `1px solid ${timeFilter === f.key ? COLORS.accent : COLORS.border}`,
+                    background: timeFilter === f.key ? COLORS.accent + "22" : "transparent",
+                    color: timeFilter === f.key ? COLORS.accent : COLORS.textDim,
+                    borderRadius: "3px", cursor: "pointer", letterSpacing: "0.5px",
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
             <div style={{ padding: "16px", maxHeight: "520px", overflowY: "auto" }}>
-              {markets.map(m => (
+              {markets
+                .filter(m => {
+                  if (timeFilter === "all") return true;
+                  if (m.daysLeft == null) return false;
+                  if (timeFilter === "3d") return m.daysLeft <= 3;
+                  if (timeFilter === "7d") return m.daysLeft <= 7;
+                  return true;
+                })
+                .map(m => (
                 <div
                   key={m.id}
                   className="mi"
