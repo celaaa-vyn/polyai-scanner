@@ -44,6 +44,24 @@ function parsePolymarketData(raw) {
       const noOdds = parseFloat(prices[1]);
       const category = m.events?.[0]?.series?.[0]?.title || m.events?.[0]?.title?.split(" ")[0] || "General";
       const vol = m.volumeNum || 0;
+      const now = Date.now();
+
+      // Detect 5-minute crypto "Up or Down" markets (series slug has '5m' or 'updown')
+      const seriesSlug = m.events?.[0]?.series?.[0]?.slug || "";
+      const eventStart = m.events?.[0]?.startTime || m.eventStartTime;
+      const is5mCrypto = /up-or-down-5m|updown-5m/.test(seriesSlug) || /Up or Down/.test(m.question);
+      
+      let daysLeft = m.endDate ? Math.max(0, Math.ceil((new Date(m.endDate) - now) / 86400000)) : null;
+      let hoursLeft = m.endDate ? Math.max(0, Math.round((new Date(m.endDate) - now) / 3600000)) : null;
+
+      // For 5m crypto markets, use eventStartTime for accurate time-to-resolve
+      if (is5mCrypto && eventStart) {
+        const startMs = new Date(eventStart).getTime();
+        const minsToStart = Math.max(0, Math.round((startMs - now) / 60000));
+        hoursLeft = minsToStart <= 60 ? 0 : Math.round(minsToStart / 60);
+        daysLeft = hoursLeft <= 24 ? 0 : Math.ceil(hoursLeft / 24);
+      }
+
       return {
         id: m.id,
         question: m.question,
@@ -55,12 +73,14 @@ function parsePolymarketData(raw) {
         live: true,
         slug: m.slug,
         endDate: m.endDate,
-        daysLeft: m.endDate ? Math.max(0, Math.ceil((new Date(m.endDate) - new Date()) / 86400000)) : null,
-        hoursLeft: m.endDate ? Math.max(0, Math.round((new Date(m.endDate) - new Date()) / 3600000)) : null,
+        daysLeft,
+        hoursLeft,
+        is5mCrypto,
+        timeLabel: is5mCrypto ? "5m" : hoursLeft != null && hoursLeft <= 1 ? "<1h" : daysLeft != null && daysLeft <= 1 ? `${hoursLeft}h` : daysLeft != null ? `${daysLeft}d` : "",
       };
     })
     .sort((a, b) => b.volumeNum - a.volumeNum)
-    .slice(0, 40);
+    .slice(0, 60);
 }
 
 /* ─── AI Auto-Trade Agent ─────────────────────────────────────────── */
@@ -619,13 +639,13 @@ Max 150 words.`;
                     if (!m.question.toLowerCase().includes(q) && !m.category.toLowerCase().includes(q)) return false;
                   }
                   // Time filter
-                  if (timeFilter === "1h") { if (m.hoursLeft == null || m.hoursLeft > 1) return false; }
+                  if (timeFilter === "1h") { if (!m.is5mCrypto && (m.hoursLeft == null || m.hoursLeft > 1)) return false; }
                   else if (timeFilter === "3d") { if (m.daysLeft == null || m.daysLeft > 3) return false; }
                   else if (timeFilter === "7d") { if (m.daysLeft == null || m.daysLeft > 7) return false; }
                   // Category filter
                   if (catFilter !== "all") {
                     const q = (m.question + " " + m.category).toLowerCase();
-                    if (catFilter === "crypto" && !/bitcoin|btc|eth|crypto|token|solana|airdrop|defi|nft|coin|pump/i.test(q)) return false;
+                    if (catFilter === "crypto" && !/bitcoin|btc|eth|crypto|token|solana|airdrop|defi|nft|coin|pump|up or down|dogecoin|doge|bnb|xrp|hyperliquid/i.test(q)) return false;
                     if (catFilter === "sports" && !/nba|atp|nfl|mlb|nhl|soccer|football|tennis|boxing|ufc|game|match|winner|serie|league|overwatch/i.test(q)) return false;
                     if (catFilter === "ai" && !/\bai\b|openai|artificial|gpt|llm|deepmind|anthropic|model|data center/i.test(q)) return false;
                     if (catFilter === "politics" && !/president|election|senate|governor|congress|trump|democrat|republican|vote|iran|ukraine|war|tariff|inflation/i.test(q)) return false;
