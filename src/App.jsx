@@ -17,7 +17,9 @@ const COLORS = {
   purple: "#a78bfa",
 };
 
-const POLYMARKET_API = "https://gamma-api.polymarket.com/markets";
+const POLYMARKET_API = import.meta.env.PROD
+  ? "/api/markets"                                    // Vercel serverless proxy (no CORS issue)
+  : "https://gamma-api.polymarket.com/markets";       // Direct API for local dev
 
 const FALLBACK_MARKETS = [
   { id: "1", question: "Will Bitcoin exceed $100,000 before April 2026?", category: "Crypto", yesOdds: 0.62, noOdds: 0.38, volume: "4,200,000", live: false },
@@ -113,7 +115,10 @@ export default function App() {
     const fetchMarkets = async () => {
       try {
         setMarketsLoading(true);
-        const res = await fetch(`${POLYMARKET_API}?closed=false&limit=100&order=volume&ascending=false`);
+        const fetchUrl = import.meta.env.PROD
+          ? POLYMARKET_API                                               // Proxy has params built-in
+          : `${POLYMARKET_API}?closed=false&limit=100&order=volume&ascending=false`;
+        const res = await fetch(fetchUrl);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const parsed = parsePolymarketData(data);
