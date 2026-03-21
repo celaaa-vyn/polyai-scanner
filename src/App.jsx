@@ -79,8 +79,13 @@ function parsePolymarketData(raw) {
         timeLabel: is5mCrypto ? "5m" : hoursLeft != null && hoursLeft <= 1 ? "<1h" : daysLeft != null && daysLeft <= 1 ? `${hoursLeft}h` : daysLeft != null ? `${daysLeft}d` : "",
       };
     })
-    .sort((a, b) => b.volumeNum - a.volumeNum)
-    .slice(0, 60);
+    .sort((a, b) => {
+      // Prioritize 5m crypto markets at top
+      if (a.is5mCrypto && !b.is5mCrypto) return -1;
+      if (!a.is5mCrypto && b.is5mCrypto) return 1;
+      return b.volumeNum - a.volumeNum;
+    })
+    .slice(0, 80);
 }
 
 /* ─── AI Auto-Trade Agent ─────────────────────────────────────────── */
