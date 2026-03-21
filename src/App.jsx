@@ -56,6 +56,7 @@ function parsePolymarketData(raw) {
         slug: m.slug,
         endDate: m.endDate,
         daysLeft: m.endDate ? Math.max(0, Math.ceil((new Date(m.endDate) - new Date()) / 86400000)) : null,
+        hoursLeft: m.endDate ? Math.max(0, Math.round((new Date(m.endDate) - new Date()) / 3600000)) : null,
       };
     })
     .sort((a, b) => b.volumeNum - a.volumeNum)
@@ -88,7 +89,8 @@ export default function App() {
   const [log, setLog] = useState([]);
   const [confidence, setConfidence] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
-  const [timeFilter, setTimeFilter] = useState("all"); // "all", "3d", "7d"
+  const [timeFilter, setTimeFilter] = useState("all"); // "all", "1h", "3d", "7d"
+  const [catFilter, setCatFilter] = useState("all"); // "all", "crypto", "sports", "ai", "politics"
 
   // ── Auto-Trade Agent State ────────────────────────────────────
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
@@ -507,11 +509,13 @@ Max 150 words.`;
               </span>
             </div>
             {/* Time Filter Buttons */}
-            <div style={{ display: "flex", gap: "6px", padding: "8px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+            <div style={{ display: "flex", gap: "6px", padding: "8px 16px", borderBottom: `1px solid ${COLORS.border}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: "9px", color: COLORS.textDim, alignSelf: "center", marginRight: "4px" }}>⏱</span>
               {[
                 { key: "all", label: "ALL" },
-                { key: "3d", label: "≤3 DAYS" },
-                { key: "7d", label: "≤7 DAYS" },
+                { key: "1h", label: "≤1H" },
+                { key: "3d", label: "≤3D" },
+                { key: "7d", label: "≤7D" },
               ].map(f => (
                 <button
                   key={f.key}
@@ -527,14 +531,45 @@ Max 150 words.`;
                   {f.label}
                 </button>
               ))}
+              <span style={{ fontSize: "9px", color: COLORS.textDim, alignSelf: "center", margin: "0 4px" }}>|</span>
+              <span style={{ fontSize: "9px", color: COLORS.textDim, alignSelf: "center", marginRight: "4px" }}>🎯</span>
+              {[
+                { key: "all", label: "ALL" },
+                { key: "crypto", label: "CRYPTO" },
+                { key: "sports", label: "SPORTS" },
+                { key: "ai", label: "AI" },
+                { key: "politics", label: "POLITICS" },
+              ].map(f => (
+                <button
+                  key={"cat-" + f.key}
+                  onClick={() => setCatFilter(f.key)}
+                  style={{
+                    padding: "4px 10px", fontSize: "10px", fontWeight: 700, fontFamily: "inherit",
+                    border: `1px solid ${catFilter === f.key ? COLORS.blue : COLORS.border}`,
+                    background: catFilter === f.key ? COLORS.blue + "22" : "transparent",
+                    color: catFilter === f.key ? COLORS.blue : COLORS.textDim,
+                    borderRadius: "3px", cursor: "pointer", letterSpacing: "0.5px",
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
             <div style={{ padding: "16px", maxHeight: "520px", overflowY: "auto" }}>
               {markets
                 .filter(m => {
-                  if (timeFilter === "all") return true;
-                  if (m.daysLeft == null) return false;
-                  if (timeFilter === "3d") return m.daysLeft <= 3;
-                  if (timeFilter === "7d") return m.daysLeft <= 7;
+                  // Time filter
+                  if (timeFilter === "1h") { if (m.hoursLeft == null || m.hoursLeft > 1) return false; }
+                  else if (timeFilter === "3d") { if (m.daysLeft == null || m.daysLeft > 3) return false; }
+                  else if (timeFilter === "7d") { if (m.daysLeft == null || m.daysLeft > 7) return false; }
+                  // Category filter
+                  if (catFilter !== "all") {
+                    const q = (m.question + " " + m.category).toLowerCase();
+                    if (catFilter === "crypto" && !/bitcoin|btc|eth|crypto|token|solana|airdrop|defi|nft|coin|pump/i.test(q)) return false;
+                    if (catFilter === "sports" && !/nba|atp|nfl|mlb|nhl|soccer|football|tennis|boxing|ufc|game|match|winner|serie|league|overwatch/i.test(q)) return false;
+                    if (catFilter === "ai" && !/\bai\b|openai|artificial|gpt|llm|deepmind|anthropic|model|data center/i.test(q)) return false;
+                    if (catFilter === "politics" && !/president|election|senate|governor|congress|trump|democrat|republican|vote|iran|ukraine|war|tariff|inflation/i.test(q)) return false;
+                  }
                   return true;
                 })
                 .map(m => (
@@ -558,7 +593,9 @@ Max 150 words.`;
                     <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "2px", background: `${COLORS.blue}22`, color: COLORS.blue, border: `1px solid ${COLORS.blue}44` }}>{m.category}</span>
                     <span style={{ fontSize: "13px", fontWeight: "bold", color: COLORS.accent }}>Y {(m.yesOdds * 100).toFixed(0)}%</span>
                     <span style={{ fontSize: "13px", fontWeight: "bold", color: COLORS.red }}>N {(m.noOdds * 100).toFixed(0)}%</span>
-                    <span style={{ fontSize: "10px", color: COLORS.textDim, marginLeft: "auto" }}>Vol: ${m.volume}</span>
+                    <span style={{ fontSize: "12px", color: COLORS.textDim, marginLeft: "auto" }}>
+                      Vol: ${m.volume}{m.hoursLeft != null ? (m.hoursLeft < 24 ? ` · ${m.hoursLeft}h` : ` · ${m.daysLeft}d`) : ""}
+                    </span>
                   </div>
                 </div>
               ))}
