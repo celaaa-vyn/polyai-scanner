@@ -29,28 +29,24 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing POLY_PRIVATE_KEY or POLY_FUNDER_ADDRESS env vars" });
   }
 
-  // ── GET BALANCE (from Polymarket CLOB) ────────────────────
+  // ── GET BALANCE ───────────────────────────────────────────
   if (action === "balance") {
     try {
-      const wallet = new ethers.Wallet(PK);
-      const clobClient = new ClobClient(
-        "https://clob.polymarket.com",
-        137,
-        wallet,
-        undefined,
-        1, // POLY_PROXY
-        FUNDER
-      );
-      const creds = await clobClient.createOrDeriveApiCreds();
-      clobClient.setCreds(creds);
-
-      // Try CLOB API balance first
+      // Try querying Polymarket's profile/balance API
       let totalBalance = 0;
       try {
-        const balData = await clobClient.getBalanceAllowance();
-        totalBalance = parseFloat(balData?.balance || "0");
-      } catch {
-        // Fallback: query blockchain for USDC
+        // Query Polymarket's CLOB API for collateral balance
+        const balResp = await fetch(`https://clob.polymarket.com/collateral-balance?address=${FUNDER}`, {
+          headers: { "Accept": "application/json" },
+        });
+        if (balResp.ok) {
+          const balData = await balResp.json();
+          totalBalance = parseFloat(balData?.balance || balData || "0") / 1e6; // USDC has 6 decimals
+        }
+      } catch {}
+
+      // Fallback: query blockchain for USDC in wallet
+      if (totalBalance <= 0) {
         try {
           const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
           const USDC = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
