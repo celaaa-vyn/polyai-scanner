@@ -125,7 +125,7 @@ function parsePolymarketData(raw) {
 
 /* ─── AI Auto-Trade Agent ─────────────────────────────────────────── */
 const AUTO_TRADE_CONFIG = {
-  minConfidence: 7,        // Only trade if AI confidence >= 7
+  minConfidence: 6,        // Only trade if AI confidence >= 6
   maxBetPct: 0.15,         // Max 15% of bankroll per trade
   minBetPct: 0.05,         // Min 5% of bankroll per trade
   intervalMs: 60000,       // Scan interval (60s) — hemat API credit
@@ -404,25 +404,32 @@ export default function App() {
   /* ─── Analyze a single market via Claude ────────────────────── */
   const analyzeMarketRaw = useCallback(async (market, useSmartModel = false) => {
     const prompt = useSmartModel
-      ? `You are an expert prediction market analyst specializing in Polymarket.
+      ? `You are an expert prediction market trader. You MUST give a decisive opinion.
 Analyze: "${market.question}"
-Category: ${market.category} | YES ${(market.yesOdds * 100).toFixed(0)}% / NO ${(market.noOdds * 100).toFixed(0)}% | Vol $${market.volume} | Date: ${new Date().toISOString().slice(0, 10)}
+Category: ${market.category} | Current Odds: YES ${(market.yesOdds * 100).toFixed(0)}% / NO ${(market.noOdds * 100).toFixed(0)}% | Volume: $${market.volume} | Time Left: ${market.timeLabel || 'N/A'} | Date: ${new Date().toISOString().slice(0, 10)}
+
+IMPORTANT: Use the FULL confidence range 1-10. Do NOT default to 5.
+- 1-3: The market odds are likely CORRECT, no edge
+- 4-5: Genuinely uncertain, not enough info
+- 6-7: Slight edge detected, worth a small bet
+- 8-10: Strong conviction, clear mispricing
 
 Provide:
-1. MARKET ASSESSMENT: What do the current odds tell us?
-2. KEY FACTORS: 3 most important factors
-3. EDGE ANALYSIS: Is there a potential mispricing?
-4. VERDICT: YES or NO — which side has better value?
+1. ASSESSMENT: Is the market pricing this correctly?
+2. KEY FACTORS: 2-3 factors driving your opinion
+3. EDGE: Why do you think the market is wrong (or right)?
+4. VERDICT: Pick YES or NO — which side has better VALUE at current odds?
 
 End with exactly:
 CONFIDENCE_SCORE: X
 RECOMMENDATION: YES or NO
 RISK_LEVEL: LOW or MEDIUM or HIGH
 Max 200 words.`
-      : `Prediction market analyst. Analyze:
-"${market.question}" | ${market.category} | YES ${(market.yesOdds * 100).toFixed(0)}% / NO ${(market.noOdds * 100).toFixed(0)}% | Vol $${market.volume} | Date: ${new Date().toISOString().slice(0, 10)}
+      : `Expert prediction market trader. Give a DECISIVE opinion. Do NOT default to 5.
+"${market.question}" | ${market.category} | YES ${(market.yesOdds * 100).toFixed(0)}% / NO ${(market.noOdds * 100).toFixed(0)}% | Vol $${market.volume} | ${market.timeLabel || ''} | ${new Date().toISOString().slice(0, 10)}
 
-Give: 1) Assessment 2) Key factors (3 max) 3) Edge? 4) Verdict: YES or NO
+Confidence scale: 1-3=no edge, 4-5=uncertain, 6-7=slight edge, 8-10=strong edge.
+Give: 1) Assessment 2) Key factors 3) Edge analysis 4) Verdict: YES or NO
 End with exactly:
 CONFIDENCE_SCORE: X
 RECOMMENDATION: YES or NO

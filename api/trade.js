@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 
 // Safety limits
 const MAX_BET_SIZE = 2.0;    // Max $2 per trade
-const MIN_CONFIDENCE = 7;     // Only trade if AI confidence >= 7/10
+const MIN_CONFIDENCE = 6;     // Only trade if AI confidence >= 6/10
 const MAX_DAILY_TRADES = 10;  // Max 10 trades per day
 const MAX_DAILY_LOSS = 5.0;   // Stop if lost $5 in a day
 
