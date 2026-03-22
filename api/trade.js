@@ -29,34 +29,40 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing POLY_PRIVATE_KEY or POLY_FUNDER_ADDRESS env vars" });
   }
 
-  const { tokenId, side, size, price, confidence, marketQuestion } = req.body || {};
-
-  // ── GET BALANCE (real USDC from Polygon) ─────────────────
+  // ── GET BALANCE (from Polymarket CLOB) ────────────────────
   if (action === "balance") {
     try {
-      // Query real USDC balance from Polygon
-      const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
-      // USDC on Polygon (PoS bridged)
-      const USDC_POS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
-      // USDC native
-      const USDC_NATIVE = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
-      const abi = ["function balanceOf(address) view returns (uint256)"];
-      
-      const [bal1, bal2] = await Promise.all([
-        new ethers.Contract(USDC_POS, abi, provider).balanceOf(FUNDER).catch(() => ethers.BigNumber.from(0)),
-        new ethers.Contract(USDC_NATIVE, abi, provider).balanceOf(FUNDER).catch(() => ethers.BigNumber.from(0)),
-      ]);
-      
-      // USDC PoS = 6 decimals, USDC Native = 6 decimals
-      const balPos = parseFloat(ethers.utils.formatUnits(bal1, 6));
-      const balNative = parseFloat(ethers.utils.formatUnits(bal2, 6));
-      const totalBalance = balPos + balNative;
+      const wallet = new ethers.Wallet(PK);
+      const clobClient = new ClobClient(
+        "https://clob.polymarket.com",
+        137,
+        wallet,
+        undefined,
+        1, // POLY_PROXY
+        FUNDER
+      );
+      const creds = await clobClient.createOrDeriveApiCreds();
+      clobClient.setCreds(creds);
+
+      // Try CLOB API balance first
+      let totalBalance = 0;
+      try {
+        const balData = await clobClient.getBalanceAllowance();
+        totalBalance = parseFloat(balData?.balance || "0");
+      } catch {
+        // Fallback: query blockchain for USDC
+        try {
+          const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
+          const USDC = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+          const abi = ["function balanceOf(address) view returns (uint256)"];
+          const bal = await new ethers.Contract(USDC, abi, provider).balanceOf(FUNDER);
+          totalBalance = parseFloat(ethers.utils.formatUnits(bal, 6));
+        } catch {}
+      }
 
       return res.status(200).json({
         success: true,
         balance: totalBalance.toFixed(2),
-        balanceUSDC_PoS: balPos.toFixed(2),
-        balanceUSDC_Native: balNative.toFixed(2),
         address: FUNDER,
         dailyTrades,
         dailyPnL: dailyPnL.toFixed(2),
@@ -67,6 +73,7 @@ export default async function handler(req, res) {
   }
 
   // ── PLACE ORDER ──────────────────────────────────────────
+  const { tokenId, side, size, price, confidence, marketQuestion } = req.body || {};
   if (action === "trade") {
     // Safety checks
     if (!tokenId || !side || !size || !price) {
