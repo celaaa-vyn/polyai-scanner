@@ -106,6 +106,8 @@ function parsePolymarketData(raw) {
         live: true,
         slug: m.slug,
         endDate: m.endDate,
+        description: m.description || "",
+        clobTokenIds: m.clobTokenIds ? JSON.parse(m.clobTokenIds) : [],
         daysLeft,
         hoursLeft,
         is5mCrypto,
@@ -551,8 +553,49 @@ Max 150 words.`;
             return;
           }
 
-          // Execute simulated trade
-          const win = Math.random() < (rec === "YES" ? market.yesOdds : market.noOdds);
+          // Execute trade — REAL if API configured, else demo
+          const tokenId = market.clobTokenIds ? market.clobTokenIds[rec === "YES" ? 0 : 1] : null;
+
+          let tradeResult;
+          if (tokenId) {
+            // ── REAL TRADE via Polymarket CLOB API ──
+            try {
+              const resp = await fetch("/api/trade", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "trade",
+                  tokenId,
+                  side: rec,
+                  size: betSize.toFixed(2),
+                  price: odds.toFixed(2),
+                  confidence: confScore,
+                  marketQuestion: market.question,
+                }),
+              });
+              const data = await resp.json();
+              if (data.success) {
+                tradeResult = { success: true, orderId: data.orderId };
+                playBeep(1200, 200); // Success beep
+                addLog(`🤖 REAL ORDER PLACED: ${data.message}`);
+              } else {
+                tradeResult = { success: false, error: data.error };
+                addLog(`🤖 Trade rejected: ${data.error}`);
+                setAgentStatus("SKIPPED (" + data.error?.slice(0, 30) + ")");
+                return;
+              }
+            } catch (err) {
+              tradeResult = { success: false, error: err.message };
+              addLog(`🤖 API Error: ${err.message}`);
+              return;
+            }
+          } else {
+            // ── DEMO TRADE (no tokenId = fallback) ──
+            tradeResult = { success: true, demo: true };
+          }
+
+          // Result tracking (for demo: simulate, for real: pending)
+          const win = tokenId ? true : (Math.random() < odds); // Real trades: assume pending, demo: simulate
           const payout = (betSize / odds) - betSize;
           const pnl = win ? payout : -betSize;
           const newBankroll = Math.max(0, bankrollRef.current + pnl);
@@ -568,15 +611,18 @@ Max 150 words.`;
             odds: (odds * 100).toFixed(0) + "%",
             confidence: confScore,
             risk,
-            result: win ? "WIN" : "LOSS",
-            pnl: pnl.toFixed(2),
+            result: tokenId ? "PENDING" : (win ? "WIN" : "LOSS"),
+            pnl: tokenId ? "0.00" : pnl.toFixed(2),
             bankrollAfter: newBankroll.toFixed(2),
             time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+            real: !!tokenId,
+            orderId: tradeResult.orderId,
           };
 
           setTradeHistory(prev => [trade, ...prev].slice(0, 50));
-          addLog(`🤖 ${win ? "✅ WIN" : "❌ LOSS"}: ${rec} $${betSize.toFixed(2)} on "${market.question.slice(0, 30)}..." → PnL: $${pnl.toFixed(2)} | Bankroll: $${newBankroll.toFixed(2)}`);
-          setAgentStatus(`TRADED: ${win ? "WIN" : "LOSS"} $${Math.abs(pnl).toFixed(2)}`);
+          const modeLabel = tokenId ? "💰 REAL" : "🎮 DEMO";
+          addLog(`🤖 ${modeLabel}: ${rec} $${betSize.toFixed(2)} on "${market.question.slice(0, 30)}..." | Conf: ${confScore}/10`);
+          setAgentStatus(`TRADED (${modeLabel}): $${betSize.toFixed(2)}`);
         } else {
           addLog(`🤖 Skip: Confidence ${confScore}/10 < ${AUTO_TRADE_CONFIG.minConfidence} threshold`);
           setAgentStatus("SCANNING (no edge found)");
