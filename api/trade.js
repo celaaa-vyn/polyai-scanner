@@ -14,10 +14,13 @@ let dailyPnL = 0;
 export default async function handler(req, res) {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+
+  // Allow GET for balance check
+  const isGet = req.method === "GET";
+  const action = isGet ? "balance" : req.body?.action;
 
   const PK = process.env.POLY_PRIVATE_KEY;
   const FUNDER = process.env.POLY_FUNDER_ADDRESS;
@@ -26,30 +29,35 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing POLY_PRIVATE_KEY or POLY_FUNDER_ADDRESS env vars" });
   }
 
-  const { action, tokenId, side, size, price, confidence, marketQuestion } = req.body;
+  const { tokenId, side, size, price, confidence, marketQuestion } = req.body || {};
 
-  // ── GET BALANCE ──────────────────────────────────────────
+  // ── GET BALANCE (real USDC from Polygon) ─────────────────
   if (action === "balance") {
     try {
-      const wallet = new ethers.Wallet(PK);
-      const clobClient = new ClobClient(
-        "https://clob.polymarket.com",
-        137, // Polygon mainnet
-        wallet,
-        undefined, // creds will be derived
-        1, // POLY_PROXY signature type (Google login)
-        FUNDER
-      );
+      // Query real USDC balance from Polygon
+      const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
+      // USDC on Polygon (PoS bridged)
+      const USDC_POS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+      // USDC native
+      const USDC_NATIVE = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
+      const abi = ["function balanceOf(address) view returns (uint256)"];
+      
+      const [bal1, bal2] = await Promise.all([
+        new ethers.Contract(USDC_POS, abi, provider).balanceOf(FUNDER).catch(() => ethers.BigNumber.from(0)),
+        new ethers.Contract(USDC_NATIVE, abi, provider).balanceOf(FUNDER).catch(() => ethers.BigNumber.from(0)),
+      ]);
+      
+      // USDC PoS = 6 decimals, USDC Native = 6 decimals
+      const balPos = parseFloat(ethers.utils.formatUnits(bal1, 6));
+      const balNative = parseFloat(ethers.utils.formatUnits(bal2, 6));
+      const totalBalance = balPos + balNative;
 
-      // Derive API creds
-      const creds = await clobClient.createOrDeriveApiCreds();
-      clobClient.setCreds(creds);
-
-      // Try to get balance info
       return res.status(200).json({
         success: true,
+        balance: totalBalance.toFixed(2),
+        balanceUSDC_PoS: balPos.toFixed(2),
+        balanceUSDC_Native: balNative.toFixed(2),
         address: FUNDER,
-        message: "Connected to Polymarket",
         dailyTrades,
         dailyPnL: dailyPnL.toFixed(2),
       });

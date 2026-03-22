@@ -196,6 +196,21 @@ export default function App() {
 
   // ── Persist to localStorage ──────────────────────────────────
   useEffect(() => { localStorage.setItem("polyai_bankroll", bankroll.toString()); }, [bankroll]);
+
+  // ── Fetch real USDC balance from Polymarket on load ─────────
+  useEffect(() => {
+    if (!import.meta.env.PROD) return; // Only on Vercel
+    fetch("/api/trade")
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && parseFloat(data.balance) > 0) {
+          const realBal = parseFloat(data.balance);
+          setBankroll(realBal);
+          addLog(`💰 Real USDC balance: $${realBal.toFixed(2)} (${data.address?.slice(0, 8)}...)`);
+        }
+      })
+      .catch(() => {}); // Silently fail — env vars might not be set
+  }, []);
   useEffect(() => { localStorage.setItem("polyai_trades", JSON.stringify(tradeHistory.slice(0, 50))); }, [tradeHistory]);
   useEffect(() => { localStorage.setItem("polyai_peak", peakBankroll.toString()); }, [peakBankroll]);
   useEffect(() => { localStorage.setItem("polyai_theme", theme); }, [theme]);
