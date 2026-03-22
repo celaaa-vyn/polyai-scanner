@@ -125,7 +125,7 @@ function parsePolymarketData(raw) {
 
 /* ─── AI Auto-Trade Agent ─────────────────────────────────────────── */
 const AUTO_TRADE_CONFIG = {
-  minConfidence: 6,        // Only trade if AI confidence >= 6
+  minConfidence: 5,        // Only trade if AI confidence >= 5
   maxBetPct: 0.15,         // Max 15% of bankroll per trade
   minBetPct: 0.05,         // Min 5% of bankroll per trade
   intervalMs: 60000,       // Scan interval (60s) — hemat API credit
@@ -404,37 +404,36 @@ export default function App() {
   /* ─── Analyze a single market via Claude ────────────────────── */
   const analyzeMarketRaw = useCallback(async (market, useSmartModel = false) => {
     const prompt = useSmartModel
-      ? `You are an expert prediction market trader. You MUST give a decisive opinion.
-Analyze: "${market.question}"
-Category: ${market.category} | Current Odds: YES ${(market.yesOdds * 100).toFixed(0)}% / NO ${(market.noOdds * 100).toFixed(0)}% | Volume: $${market.volume} | Time Left: ${market.timeLabel || 'N/A'} | Date: ${new Date().toISOString().slice(0, 10)}
+      ? `You are a BOLD prediction market trader who always takes a position. NEVER sit on the fence.
+Market: "${market.question}"
+Data: ${market.category} | YES ${(market.yesOdds * 100).toFixed(0)}% / NO ${(market.noOdds * 100).toFixed(0)}% | Vol $${market.volume} | Time: ${market.timeLabel || 'N/A'} | ${new Date().toISOString().slice(0, 10)}
 
-IMPORTANT: Use the FULL confidence range 1-10. Do NOT default to 5.
-- 1-3: The market odds are likely CORRECT, no edge
-- 4-5: Genuinely uncertain, not enough info
-- 6-7: Slight edge detected, worth a small bet
-- 8-10: Strong conviction, clear mispricing
+RULES:
+- NEVER give CONFIDENCE_SCORE: 5. The number 5 is BANNED.
+- You MUST pick a side and commit to it.
+- If odds are ~50/50, find ANY reason to lean one way. Give at least 6.
+- If odds are extreme (>80% or <20%), assess if the market is right. If yes, give 2-3. If mispriced, give 7+.
+- Use the FULL range: 1-4 = market is correct, 6-7 = slight edge, 8-10 = strong edge.
 
 Provide:
-1. ASSESSMENT: Is the market pricing this correctly?
-2. KEY FACTORS: 2-3 factors driving your opinion
-3. EDGE: Why do you think the market is wrong (or right)?
-4. VERDICT: Pick YES or NO — which side has better VALUE at current odds?
+1. POSITION: Which side and WHY (2 sentences max)
+2. EDGE: What does the market get wrong?
+3. VERDICT: YES or NO
 
 End with exactly:
 CONFIDENCE_SCORE: X
 RECOMMENDATION: YES or NO
 RISK_LEVEL: LOW or MEDIUM or HIGH
-Max 200 words.`
-      : `Expert prediction market trader. Give a DECISIVE opinion. Do NOT default to 5.
-"${market.question}" | ${market.category} | YES ${(market.yesOdds * 100).toFixed(0)}% / NO ${(market.noOdds * 100).toFixed(0)}% | Vol $${market.volume} | ${market.timeLabel || ''} | ${new Date().toISOString().slice(0, 10)}
+Max 150 words.`
+      : `BOLD trader. ALWAYS pick a side. NEVER give confidence 5 (BANNED).
+"${market.question}" | ${market.category} | YES ${(market.yesOdds * 100).toFixed(0)}%/NO ${(market.noOdds * 100).toFixed(0)}% | Vol $${market.volume} | ${market.timeLabel || ''} | ${new Date().toISOString().slice(0, 10)}
 
-Confidence scale: 1-3=no edge, 4-5=uncertain, 6-7=slight edge, 8-10=strong edge.
-Give: 1) Assessment 2) Key factors 3) Edge analysis 4) Verdict: YES or NO
-End with exactly:
+Rules: 5 is BANNED. Pick a side. If 50/50 odds, find any edge and give 6+. Range: 1-4=no edge, 6-7=slight, 8-10=strong.
+Give: 1) Position + why 2) Edge 3) Verdict
 CONFIDENCE_SCORE: X
 RECOMMENDATION: YES or NO
 RISK_LEVEL: LOW or MEDIUM or HIGH
-Max 150 words.`;
+Max 100 words.`;
 
     const response = await fetch(ANTHROPIC_API, {
       method: "POST",
