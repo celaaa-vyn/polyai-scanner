@@ -771,10 +771,23 @@ Max 150 words.`;
               </div>
             </div>
           </div>
-          {[[t.bankroll, `$${bankroll.toFixed(2)}`, COLORS.accent], [t.target, "$100.00", COLORS.yellow], [t.trades, `${agentStats.total}`, COLORS.blue]].map(([l, v, c]) => (
+          {[
+            [t.bankroll, bankroll, COLORS.accent, true],
+            [t.target, 100, COLORS.yellow, false],
+            [t.trades, agentStats.total, COLORS.blue, false],
+          ].map(([l, v, c, editable]) => (
             <div key={l} style={{ textAlign: "right" }}>
               <div style={{ fontSize: "10px", color: COLORS.textDim, letterSpacing: "2px" }}>{l}</div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: c }}>{v}</div>
+              {editable ? (
+                <div onClick={() => {
+                  const val = prompt("Set bankroll ($):", bankroll.toFixed(2));
+                  if (val && !isNaN(parseFloat(val))) setBankroll(parseFloat(val));
+                }} style={{ fontSize: "20px", fontWeight: "bold", color: c, cursor: "pointer" }} title="Click to edit">
+                  ${typeof v === "number" ? v.toFixed(2) : v}
+                </div>
+              ) : (
+                <div style={{ fontSize: "20px", fontWeight: "bold", color: c }}>{typeof v === "number" && l !== t.trades ? `$${v.toFixed(2)}` : v}</div>
+              )}
             </div>
           ))}
         </div>
